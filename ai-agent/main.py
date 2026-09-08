@@ -8,9 +8,11 @@ Usage:
 
 With no argument, uses the spec's own example incident description.
 
-Requires ANTHROPIC_API_KEY (nodes 1, 3, 5, 6 call the LLM) and the
-Order Service + Prometheus running (scripts/start-infra.sh) so the MCP
-tool calls in nodes 2/4/8/9 have something real to read.
+Requires an LLM for nodes 1, 3, 5, 6 -- see llm.py for how that's
+selected (LLM_PROVIDER=anthropic needs ANTHROPIC_API_KEY; =ollama needs
+a local `ollama serve` running) -- and the Order Service + Prometheus
+running (scripts/start-infra.sh) so the MCP tool calls in nodes 2/4/8/9
+have something real to read.
 
 This script is the *only* place that calls `input()` -- the graph
 itself never blocks on stdin. nodes/human_approval.py's `interrupt()`
@@ -47,9 +49,11 @@ def _print_approval_request(payload: dict) -> None:
 
 
 def run(incident_description: str) -> None:
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    provider = os.getenv("LLM_PROVIDER", "anthropic").lower()
+    if provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
         print("ANTHROPIC_API_KEY is not set in ai-agent/.env -- every LLM node "
-              "in this graph needs it. See README.md 'One-time setup'.")
+              "in this graph needs it. See README.md 'One-time setup', or set "
+              "LLM_PROVIDER=ollama to use a local model instead (see llm.py).")
         return
 
     app = build_graph()

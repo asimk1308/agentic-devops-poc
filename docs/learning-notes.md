@@ -405,3 +405,88 @@ before a dashboard shows anything.
 GitHub MCP call into `nodes/investigate.py`'s deployment-hypothesis
 branch, which currently only leaves a placeholder note. See
 `docs/demo-script.md` Scenario 3 for the concrete remaining steps.
+
+---
+
+## Phase 4, LLM verification (`ai-agent/llm.py`, `ANTHROPIC_API_KEY` → local Ollama)
+
+**Two Anthropic dead ends before a working key:** the first key given was
+org-level, not scoped to a workspace (`anthropic-workspace-id` header
+required) — Anthropic's API always resolves a request against exactly
+one workspace and won't guess which. The second, workspace-scoped key
+hit a $0 credit balance instead. Neither is a code problem; both are
+Anthropic Console account state.
+
+**Switched to a local model instead** (Ollama + `qwen2.5`, already
+installed and pulled on this machine) rather than paying to unblock
+Anthropic, since the goal here is learning the orchestration, not the
+specific model vendor — which is itself the point of `ai-agent/llm.py`:
+one `get_llm()` function reading `LLM_PROVIDER` from `.env`, so all four
+LLM nodes (`understand_incident`, `generate_hypotheses`,
+`evaluate_evidence`, `plan_remediation`) get their model from one place
+instead of each constructing `ChatAnthropic(...)` directly. Concretely
+answers Section 23's "did LangChain simplify model interaction?" — yes,
+enough that swapping providers touched one file instead of four.
+
+**A real structured-output gap this surfaced:** `qwen2.5` does not
+reliably honor an enum stated only in a Pydantic field's `description`
+string — asked for `priority: one of low/medium/high/critical`, it
+returned `'High Urgency - Immediate Attention Required'`. Claude had
+never shown this failure mode in testing, which is exactly why it went
+unnoticed until swapping models. The fix was making the fields
+themselves `Literal["low", "medium", "high", "critical"]` etc.
+(`nodes/understand_incident.py`, `nodes/remediation.py`) rather than
+free `str` fields — that constraint goes into the actual JSON schema
+`with_structured_output` sends the model, not just the prompt text, and
+qwen2.5 honored it exactly on retest. Worth calling out as a general
+lesson, not an Ollama-specific one: anywhere a structured-output field's
+value is later compared by exact equality in code (`nodes/human_approval.py`'s
+`plan.get("action") == "NONE"`, `routes.py`), the schema should enforce
+that constraint, not just the prompt — weaker models expose this gap
+first, but a strict schema is strictly better on stronger models too, at
+no real cost.
+
+**Verified live end-to-end, all three Section 21 scenarios, real LLM
+calls throughout, on `qwen2.5` via Ollama:**
+
+- **Scenario 1 (healthy):** `evaluate_evidence` reported 100% confidence
+  in "no significant incident," `plan_remediation` returned `NONE`, no
+  approval prompt appeared (correctly skipped by
+  `nodes/human_approval.py`), final summary reported `UP`.
+- **Scenario 2 (latency, 2000ms injected + real traffic):**
+  `gather_evidence` saw `DEGRADED`/`p95_latency_ms: 2118`; the model
+  diagnosed "increased load... recent surge in traffic" at 70%
+  confidence (plausible from the evidence alone — it has no visibility
+  into the injected fault, which is the point) and proposed
+  `RESTART_SERVICE`. Approved via the real interrupt/resume path; the
+  real `restart_service()` ran; `validate` correctly reported **STILL
+  DEGRADED** afterward (`p95_latency_ms: 2118.9`, essentially
+  unchanged) — a genuine, honest demonstration of why an env-var-driven
+  fault needs `rollback_version()`-style remediation, not
+  `restart_service()`, and validation correctly caught that the action
+  didn't work instead of reporting false success.
+- **Scenario 3 (30% injected errors + real traffic):** the model
+  actually read the literal `FaultInjectionFilter`-logged line
+  ("Injected fault: simulated failure...") out of `get_recent_errors()`
+  and concluded "Simulated fault injection is causing degraded
+  performance" at 80% confidence, then correctly proposed `NONE` (a
+  process restart doesn't fix a config-driven fault) — no approval
+  interrupt fired, matching `nodes/human_approval.py`'s designed
+  behavior for a no-action plan. Separately confirmed the reject path
+  itself works (a manual `"n"` response during Scenario 2 testing
+  correctly routed to `skip_execution` → validate's no-action branch)
+  before this run took the no-interrupt path on its own.
+
+**A restart-script bug this testing found and fixed:**
+`scripts/_restart-order-service.sh` originally found only the java child
+process via `lsof` on :8080 and killed just that — but `mvn
+spring-boot:run` is two processes (the mvn wrapper + the java child it
+forks), and the wrapper stays alive briefly after the child dies,
+writing its own "process terminated with exit code: 143" line to
+`/tmp/order-service.log` right as the *next* invocation's `>` redirect
+truncates that same file — a genuine race that corrupted the log file
+(binary garbage) during earlier fault-injection testing and would have
+fed that garbage straight into `get_recent_errors()` → the hypothesis
+LLM prompt. Fixed by matching both processes with `pkill -f
+"spring-boot:run"` and waiting on `pgrep`, not just the port, before
+truncating.

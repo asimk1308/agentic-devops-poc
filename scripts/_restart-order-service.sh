@@ -7,11 +7,19 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/env.sh
 
-pid=$(lsof -tiTCP:8080 -sTCP:LISTEN 2>/dev/null || true)
-if [ -n "$pid" ]; then
-  kill "$pid"
+# `mvn spring-boot:run` is two processes (the mvn wrapper + the java
+# child it forks); lsof on :8080 only finds the java child. Killing just
+# that pid leaves the mvn wrapper alive for a moment, still writing its
+# own "process terminated" line to the *same* log file the next
+# invocation's `>` redirect is about to truncate -- a real race that
+# corrupted /tmp/order-service.log during Phase 4 testing (see
+# docs/learning-notes.md). pkill -f matches both processes by command
+# line, and waiting on pgrep (not just the port) confirms both are
+# actually gone, not just that the socket closed, before truncating.
+if pgrep -f "spring-boot:run" >/dev/null 2>&1; then
+  pkill -f "spring-boot:run" || true
   for i in $(seq 1 15); do
-    lsof -tiTCP:8080 -sTCP:LISTEN >/dev/null 2>&1 || break
+    pgrep -f "spring-boot:run" >/dev/null 2>&1 || break
     sleep 1
   done
 fi

@@ -23,14 +23,14 @@ truth for architecture and the step-by-step build sequence.
 - 🟡 **Phase 3 — MCP servers**: observability-server and
   remediation-server built and verified live. GitHub MCP client written
   but unverified — needs a `GITHUB_TOKEN` (see "Running Phase 3" below).
-- 🟡 **Phase 4 — full LangGraph incident-response workflow**: built and
-  wired end-to-end (all 9 nodes, the Step 13 investigation loop, the
-  Node 7 human-approval interrupt) — see "Running Phase 4" below. The
-  MCP-calling nodes and the interrupt/resume mechanics are verified live
-  against real infra; the LLM-calling nodes (1, 3, 5, 6) are unverified
-  live — no `ANTHROPIC_API_KEY` configured in this checkout yet (routing
-  and looping were dry-run with those four nodes stubbed instead — see
-  `docs/learning-notes.md`).
+- ✅ **Phase 4 — full LangGraph incident-response workflow**: built,
+  wired, and verified live end-to-end — all 9 nodes, the Step 13
+  investigation loop, the Node 7 human-approval interrupt (both approve
+  and reject paths), all three Section 21 demo scenarios, real LLM
+  calls throughout. Currently running on a local model (Ollama +
+  `qwen2.5`, `LLM_PROVIDER=ollama`) rather than Anthropic — see
+  "Running Phase 4" below and `docs/learning-notes.md` for why and what
+  it surfaced.
 - ✅ **Fault injection (Section 12)**: latency and error-rate injection
   (`scripts/inject_latency.sh` / `inject_failure.sh`) built and verified
   live end-to-end through Prometheus into the observability MCP tools —
@@ -62,11 +62,20 @@ python3.12 -m venv .venv        # already created in this checkout
 cp .env.example .env            # already done in this checkout
 ```
 
-Then edit `ai-agent/.env` and set at least `ANTHROPIC_API_KEY` — every
-LLM-calling step is gated on it and prints a clear message instead of
-failing if it's missing. `LANGCHAIN_API_KEY`/`LANGCHAIN_TRACING_V2` (for
-LangSmith) and `GITHUB_TOKEN` (for GitHub MCP, Phase 3) are optional and
-only needed once you reach the steps that use them.
+Then edit `ai-agent/.env` and set `LLM_PROVIDER` (see `ai-agent/llm.py`):
+- `anthropic` (default): set `ANTHROPIC_API_KEY` too — needs a
+  workspace-scoped key with a funded workspace (an org-level key without
+  a workspace, or one with a $0 balance, fails at request time with a
+  clear error either way).
+- `ollama`: no key needed, but `ollama serve` must be running locally
+  with `OLLAMA_MODEL` (default `qwen2.5`) pulled — `ollama pull qwen2.5`
+  if you don't have it. This is what's actually configured and verified
+  in this checkout (see `docs/learning-notes.md` for why, and a real
+  structured-output gap it surfaced with a local model).
+
+`LANGCHAIN_API_KEY`/`LANGCHAIN_TRACING_V2` (for LangSmith) and
+`GITHUB_TOKEN` (for GitHub MCP, Phase 3) are optional and only needed
+once you reach the steps that use them.
 
 ## Running Phase 1
 
@@ -138,7 +147,7 @@ ai-agent/.venv/bin/python ai-agent/mcp_integrations/github_client.py
 ## Running Phase 4
 
 With Order Service + Prometheus running (`scripts/start-infra.sh`) and
-`ANTHROPIC_API_KEY` set in `ai-agent/.env`:
+an LLM configured (`ai-agent/.env` — see "One-time setup" above):
 
 ```bash
 ai-agent/.venv/bin/python ai-agent/main.py "Investigate performance degradation in Order Service."

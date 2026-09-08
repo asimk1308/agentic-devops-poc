@@ -10,9 +10,10 @@ on to remediation planning -- it can't do that off free text.
 import json
 from pathlib import Path
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
+
+from llm import get_llm
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "root_cause_analysis.md"
 
@@ -24,8 +25,7 @@ class RootCauseAnalysis(BaseModel):
 
 
 def evaluate_evidence(state: dict) -> dict:
-    model = ChatAnthropic(model="claude-sonnet-5", temperature=0)
-    structured = model.with_structured_output(RootCauseAnalysis)
+    structured = get_llm().with_structured_output(RootCauseAnalysis)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", PROMPT_PATH.read_text()),

@@ -6,25 +6,30 @@ into the (service, incident_type, priority) shape every later node
 routes and reasons on, instead of every node re-parsing English.
 """
 from pathlib import Path
+from typing import Literal
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
+
+from llm import get_llm
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "incident_analysis.md"
 
 
 class IncidentUnderstanding(BaseModel):
     service: str = Field(description="The service name mentioned or implied")
-    incident_type: str = Field(
-        description="One of: performance_degradation, error_spike, outage, unknown"
-    )
-    priority: str = Field(description="One of: low, medium, high, critical")
+    # Literal, not just a description string, so the model's structured-
+    # output schema itself constrains the value to these four -- a
+    # weaker local model (see llm.py, LLM_PROVIDER=ollama) won't reliably
+    # honor an enum stated only in prose, but does honor an actual JSON
+    # schema enum. See docs/learning-notes.md Phase 4 for what qwen2.5
+    # returned before vs. after this change.
+    incident_type: Literal["performance_degradation", "error_spike", "outage", "unknown"]
+    priority: Literal["low", "medium", "high", "critical"]
 
 
 def understand_incident(state: dict) -> dict:
-    model = ChatAnthropic(model="claude-sonnet-5", temperature=0)
-    structured = model.with_structured_output(IncidentUnderstanding)
+    structured = get_llm().with_structured_output(IncidentUnderstanding)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", PROMPT_PATH.read_text()),

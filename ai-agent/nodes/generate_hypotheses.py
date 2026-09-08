@@ -17,9 +17,10 @@ so investigate() can still dispatch on ones it hasn't covered yet.
 import json
 from pathlib import Path
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
+
+from llm import get_llm
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "hypothesis_generation.md"
 
@@ -35,8 +36,7 @@ class Hypotheses(BaseModel):
 
 
 def generate_hypotheses(state: dict) -> dict:
-    model = ChatAnthropic(model="claude-sonnet-5", temperature=0)
-    structured = model.with_structured_output(Hypotheses)
+    structured = get_llm().with_structured_output(Hypotheses)
 
     human_message = (
         "Incident: {incident_description}\n\n"

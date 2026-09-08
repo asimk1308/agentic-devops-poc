@@ -4,6 +4,10 @@ langchain-anthropic>=0.3
 langgraph>=0.2
 langsmith>=0.1
 
+# Optional: local LLM via Ollama (LLM_PROVIDER=ollama in ai-agent/.env,
+# see ai-agent/llm.py) -- no API key/cost, needs `ollama serve` running.
+langchain-ollama>=0.2
+
 # MCP (Model Context Protocol) Python SDK — client + server
 mcp>=1.0
 

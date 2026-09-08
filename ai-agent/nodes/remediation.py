@@ -11,24 +11,29 @@ Principle 3).
 """
 import json
 from pathlib import Path
+from typing import Literal
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from llm import get_llm
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "remediation_planning.md"
 
 
 class RemediationPlan(BaseModel):
-    action: str = Field(description="RESTART_SERVICE or NONE")
+    # Literal fields, not description-only strings -- routes.py and
+    # nodes/human_approval.py compare `action` by exact equality
+    # ("== NONE"), so this needs to be schema-enforced, not just
+    # prompted for, especially on a weaker local model (llm.py).
+    action: Literal["RESTART_SERVICE", "NONE"]
     reason: str
-    risk: str = Field(description="LOW, MEDIUM, or HIGH")
+    risk: Literal["LOW", "MEDIUM", "HIGH"]
     requires_human_approval: bool
 
 
 def plan_remediation(state: dict) -> dict:
-    model = ChatAnthropic(model="claude-sonnet-5", temperature=0)
-    structured = model.with_structured_output(RemediationPlan)
+    structured = get_llm().with_structured_output(RemediationPlan)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", PROMPT_PATH.read_text()),
