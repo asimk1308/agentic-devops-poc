@@ -20,8 +20,14 @@ Running commentary on *why* each piece works the way it does:
 - 🟡 **Phase 3 — MCP servers**: observability-server and
   remediation-server built and verified live. GitHub MCP client written
   but unverified — needs a `GITHUB_TOKEN` (see "Running Phase 3" below).
-- ⬜ **Phase 4 — full LangGraph incident-response workflow**: not yet
-  built.
+- 🟡 **Phase 4 — full LangGraph incident-response workflow**: built and
+  wired end-to-end (all 9 nodes, the Step 13 investigation loop, the
+  Node 7 human-approval interrupt) — see "Running Phase 4" below. The
+  MCP-calling nodes and the interrupt/resume mechanics are verified live
+  against real infra; the LLM-calling nodes (1, 3, 5, 6) are unverified
+  live — no `ANTHROPIC_API_KEY` configured in this checkout yet (routing
+  and looping were dry-run with those four nodes stubbed instead — see
+  `docs/learning-notes.md`).
 
 ## One-time setup
 
@@ -117,11 +123,36 @@ ai-agent/.venv/bin/python mcp-servers/remediation-server/test_client.py
 
 # GitHub MCP: needs GITHUB_TOKEN + GITHUB_REPO in ai-agent/.env first;
 # prints setup instructions and exits cleanly if unset
-ai-agent/.venv/bin/python ai-agent/mcp/github_client.py
+ai-agent/.venv/bin/python ai-agent/mcp_integrations/github_client.py
 ```
+
+## Running Phase 4
+
+With Order Service + Prometheus running (`scripts/start-infra.sh`) and
+`ANTHROPIC_API_KEY` set in `ai-agent/.env`:
+
+```bash
+ai-agent/.venv/bin/python ai-agent/main.py "Investigate performance degradation in Order Service."
+# or, with no argument, uses that same sentence as the default incident
+ai-agent/.venv/bin/python ai-agent/main.py
+```
+
+This runs the full Section 8 graph: understand → gather evidence →
+generate hypotheses → investigate → evaluate (looping back through
+generate/investigate up to twice if confidence stays below 70%) →
+plan remediation → **pause for your y/n approval in the terminal** → (if
+approved) execute the restart → validate → print a before/after
+summary. Nothing is executed without that approval prompt — approve
+only if you actually want the real Order Service process restarted.
+
+To watch the full trace (every node, every LLM call, every MCP tool
+call) in LangSmith instead of only the terminal output, set
+`LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` in `ai-agent/.env`
+first (Spec Section 16).
 
 ## Project layout
 
-See `PLAN.md` Section 17 for the full intended layout. Directories not
-yet populated (`demo-service/`, `mcp-servers/*`, `prometheus/`,
-`ai-agent/graph/`, `ai-agent/nodes/`) are placeholders for Phases 2–4.
+See `PLAN.md` Section 17 for the full intended layout.
+`ai-agent/graph/`, `ai-agent/nodes/`, `ai-agent/mcp_integrations/`, and
+`ai-agent/prompts/` (Phase 4) are now populated; `demo-service/`,
+`mcp-servers/*`, and `prometheus/` (Phases 2–3) already were.

@@ -225,7 +225,7 @@ protocol doesn't conjure data the source system isn't emitting.
 ---
 
 ## Phase 3, Step 8 — GitHub MCP
-`ai-agent/mcp/github_client.py`
+`ai-agent/mcp_integrations/github_client.py`
 
 **Not yet verified live** — no `GITHUB_TOKEN` configured. This is the
 one Phase 3 piece that's genuinely different from Steps 7/9: it connects
@@ -275,7 +275,76 @@ approval gate wired correctly," which get debugged separately.
 
 ## Phase 4
 
-Not yet built — see `PLAN.md` Sections 19/20 for the step sequence and
-the plan file for current status. Add notes here once there's a working
-end-to-end run, answering the spec's per-node "learning" callouts
-(Section 11) and the Section 23 evaluation questions.
+`ai-agent/graph/`, `ai-agent/nodes/`, `ai-agent/mcp_integrations/`,
+`ai-agent/prompts/`, `ai-agent/main.py`
+
+**Why `ai-agent/mcp/` had to be renamed to `ai-agent/mcp_integrations/`
+before this phase could import anything:** a directory literally named
+`mcp` sitting next to `main.py` (which becomes `sys.path[0]`) shadows
+the *installed* `mcp` SDK package — `from mcp import ClientSession`
+inside our own `mcp_integrations/client.py` started resolving to
+itself instead of the real SDK. Confirmed empirically (`cannot import
+name 'tools' from 'mcp'`) before renaming. Lesson: a local package name
+that collides with a third-party import is a real, not theoretical,
+footgun the moment its directory is importable (i.e. sits next to the
+entry-point script or is otherwise on `sys.path`).
+
+**Verified live** (no `ANTHROPIC_API_KEY` configured in this checkout,
+so this covers everything *except* the four LLM-calling nodes):
+- `nodes/gather_evidence.py`, `nodes/investigate.py`,
+  `nodes/execute_remediation.py`, `nodes/validate.py` — each ran for
+  real against the running Order Service + Prometheus. `investigate()`'s
+  keyword dispatch (`mcp_integrations/tools.py`) correctly pulled
+  `recent_errors` + `latency_metrics` for a "database" hypothesis and
+  fell through to `latency_metrics` alone for a "resource exhaustion"
+  one.
+- The `interrupt()` / `Command(resume=...)` / `MemorySaver` mechanics in
+  `nodes/human_approval.py` + `main.py`, isolated in a throwaway
+  two-node graph first (langgraph 1.2.11 confirmed): `.invoke()` returns
+  `{"__interrupt__": (Interrupt(value=...),)}` rather than raising, and
+  a second `.invoke(Command(resume=...), config)` on the *same*
+  `thread_id` resumes from exactly that node.
+- The full graph, end-to-end, with the four LLM nodes monkeypatched to
+  stub functions (so routing/looping could be tested without a real API
+  key): a first low-confidence `evaluate_evidence` correctly routed back
+  through `generate_hypotheses` → `investigate` (Step 13's loop; also
+  confirms `generate_hypotheses`'s merge-not-replace logic keeps the
+  original hypothesis around across the loop) rather than straight to
+  remediation, a second high-confidence pass proceeded to
+  `plan_remediation` → interrupted for approval, and resuming with
+  `"yes"` drove a **real** `restart_service()` call against the actual
+  local Order Service (it came back `UP` within the timeout, same as
+  Phase 3's isolated test) followed by a correct before/after
+  `final_summary`.
+
+**Why does `generate_hypotheses` merge new hypotheses into the existing
+list instead of replacing it on a loop-back pass, and why does it get
+fed `investigation_results` on that second call?** Section 8's "No"
+branch out of "Enough Evidence?" only makes sense as a real loop (Step
+13 explicitly names this "one of the main reasons to use LangGraph") if
+the second pass has something the first didn't — otherwise re-running
+`generate_hypotheses` against the *same* initial evidence snapshot would
+just reproduce the same hypotheses and the loop would spin without
+converging. Feeding it the accumulated `investigation_results` lets it
+propose hypotheses that are actually informed by what's been ruled in or
+out; merging (keyed by `description`) rather than overwriting means
+`investigate()`'s "skip already-investigated" dedup still sees the full
+history instead of losing track of what round one covered.
+
+**Why is `nodes/execute_remediation.py` and `nodes/validate.py`'s only
+gate the interrupt in `human_approval.py`, not something in `routes.py`
+before it?** `route_after_approval` only reads `state["human_approved"]`
+— it can't itself decide *whether* to ask, because "whether an action
+needs approval" is a property of the plan (`remediation_plan`), not of
+the routing step. `human_approval.py` folding that check in (skip the
+interrupt entirely when the plan is `NONE` or already says no approval
+needed) keeps "was permission required" and "was permission granted" as
+one node's responsibility instead of splitting it across two.
+
+**Not yet verified live:** the four LLM nodes
+(`understand_incident`, `generate_hypotheses`, `evaluate_evidence`,
+`plan_remediation`) and their prompts — needs `ANTHROPIC_API_KEY` (see
+README "Running Phase 4"). Once run, this section should get an update
+with what a real hypothesis/root-cause/remediation output actually
+looked like for at least the healthy and injected-fault scenarios
+(Section 21), plus the Section 23 evaluation-criteria answers.
