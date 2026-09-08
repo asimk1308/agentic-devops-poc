@@ -348,3 +348,60 @@ README "Running Phase 4"). Once run, this section should get an update
 with what a real hypothesis/root-cause/remediation output actually
 looked like for at least the healthy and injected-fault scenarios
 (Section 21), plus the Section 23 evaluation-criteria answers.
+
+---
+
+## Phase 4, Fault Injection (Section 12)
+
+`demo-service/src/main/java/com/example/orderservice/FaultInjectionFilter.java`,
+`scripts/inject_latency.sh`, `scripts/inject_failure.sh`,
+`scripts/clear_faults.sh`, `scripts/generate_load.py`
+
+**Verified live, full chain, both fault types:** restart with
+`FAULT_LATENCY_MS=2000` → `generate_load.py` → observability MCP's
+`get_service_metrics()` reported `status: DEGRADED, p95_latency_ms:
+2120.0` (client-observed p95 was 2016ms — the small gap is real
+network/JVM overhead on top of the injected sleep, not error). Same for
+`FAULT_ERROR_RATE=0.3`: `get_recent_errors()` returned real
+`FaultInjectionFilter`-logged `ERROR` lines, and `get_service_metrics()`
+again reported `DEGRADED`.
+
+**Why a servlet `Filter` instead of adding the fault check inside
+`OrderController`?** It runs identically for every endpoint without
+touching business-logic code, and — more importantly — it still sits
+*inside* the request/response cycle that Micrometer's own metrics filter
+wraps, so `sendError()` here produces a real 5xx that Micrometer records
+correctly by status code. The alternative (throwing an exception from
+the controller) would need an `@ExceptionHandler` to get the status code
+right and adds noise to the one file that's supposed to just be the
+"real business logic."
+
+**A real surprise worth recording:** right after switching from
+`FAULT_LATENCY_MS=2000` to `FAULT_ERROR_RATE=0.3` (a full process
+restart in between), `get_service_metrics()` still showed
+`p95_latency_ms: 2096.6` even though the *new* process had no latency
+fault active. This isn't a bug — Prometheus's `rate(...)[5m]` window is
+time-based, not process-based: the TSDB kept the previous process's
+samples and blended them with the new ones because both scrapes hit the
+same `job`/`instance` label within the same 5-minute window. Restarting
+the *service* does not reset the *metrics history* — a real thing to
+account for when reading "before vs. after remediation" numbers close
+together in time, and a good live talking point for why
+`nodes/validate.py`'s before/after diff should ideally wait out a full
+window, or query a narrower one, right after a restart.
+
+**Why is `generate_load.py` a separate script instead of folding traffic
+generation into the inject scripts?** A fault alone doesn't move any of
+Prometheus's `rate()`-based queries — `get_latency_metrics()` and
+`get_error_rate()` are windowed rates over *requests that actually
+happened*, so "inject the fault" and "produce the traffic that reveals
+it" are genuinely two different concerns; the demo script
+(`docs/demo-script.md`) runs them as separate terminals on purpose, the
+same way a real degraded service needs real user traffic hitting it
+before a dashboard shows anything.
+
+**Not done:** Scenario 4's git-commit correlation half — this needs
+`GITHUB_TOKEN` (still unset in this checkout) and wiring an actual
+GitHub MCP call into `nodes/investigate.py`'s deployment-hypothesis
+branch, which currently only leaves a placeholder note. See
+`docs/demo-script.md` Scenario 3 for the concrete remaining steps.

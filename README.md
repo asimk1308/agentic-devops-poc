@@ -7,8 +7,11 @@ remediation action.
 
 Full design spec: [PLAN.md](PLAN.md) — read it first, it's the source of
 truth for architecture and the step-by-step build sequence.
-Running commentary on *why* each piece works the way it does:
-[docs/learning-notes.md](docs/learning-notes.md).
+[docs/architecture.md](docs/architecture.md) is the as-built picture
+(what's real right now vs. still spec-shaped). Running commentary on
+*why* each piece works the way it does:
+[docs/learning-notes.md](docs/learning-notes.md). Live-demo walkthroughs:
+[docs/demo-script.md](docs/demo-script.md).
 
 ## Status
 
@@ -28,6 +31,12 @@ Running commentary on *why* each piece works the way it does:
   live — no `ANTHROPIC_API_KEY` configured in this checkout yet (routing
   and looping were dry-run with those four nodes stubbed instead — see
   `docs/learning-notes.md`).
+- ✅ **Fault injection (Section 12)**: latency and error-rate injection
+  (`scripts/inject_latency.sh` / `inject_failure.sh`) built and verified
+  live end-to-end through Prometheus into the observability MCP tools —
+  see "Running fault injection" and `docs/demo-script.md`. Scenario 4's
+  git-commit correlation half is not yet wired in (needs `GITHUB_TOKEN`
+  — same gap as Phase 3's GitHub MCP item above).
 
 ## One-time setup
 
@@ -149,6 +158,26 @@ To watch the full trace (every node, every LLM call, every MCP tool
 call) in LangSmith instead of only the terminal output, set
 `LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` in `ai-agent/.env`
 first (Spec Section 16).
+
+## Running fault injection
+
+With Order Service + Prometheus running (`scripts/start-infra.sh`):
+
+```bash
+scripts/inject_latency.sh 2000     # Scenario 2 — restarts with a 2s
+                                    # injected delay on every request
+scripts/inject_failure.sh 0.3      # Scenario 3 — restarts with 30% of
+                                    # requests returning a real 5xx
+
+python3 scripts/generate_load.py --duration 20 --rate 5   # generate
+                                    # real traffic so Prometheus's
+                                    # rate()-based queries move
+
+scripts/clear_faults.sh            # reset to a clean, no-fault state
+```
+
+See [docs/demo-script.md](docs/demo-script.md) for full scenario
+walkthroughs combining this with `ai-agent/main.py`.
 
 ## Project layout
 
