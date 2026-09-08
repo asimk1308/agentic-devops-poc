@@ -24,7 +24,8 @@ load_dotenv()
 
 TRACING_ON = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
 HAS_LANGSMITH_KEY = bool(os.getenv("LANGCHAIN_API_KEY"))
-HAS_ANTHROPIC_KEY = bool(os.getenv("ANTHROPIC_API_KEY"))
+PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").lower()
+LLM_READY = PROVIDER == "ollama" or bool(os.getenv("ANTHROPIC_API_KEY"))
 PROJECT = os.getenv("LANGCHAIN_PROJECT", "agentic-devops-poc")
 
 
@@ -54,30 +55,33 @@ def main() -> None:
             "silently create a trace at https://smith.langchain.com under "
             f"the '{PROJECT}' project, containing:\n"
             "  - a top-level Run for the chain (prompt | structured_model)\n"
-            "  - a child Run for the ChatAnthropic call, with the exact\n"
-            "    rendered prompt, the raw model response, and token counts\n"
+            "  - a child Run for the chat model call (get_llm() in\n"
+            "    ai-agent/llm.py), with the exact rendered prompt, the raw\n"
+            "    model response, and token counts\n"
             "  - a child Run for the structured-output parsing step\n\n"
             "To turn it on: set LANGCHAIN_TRACING_V2=true and "
             "LANGCHAIN_API_KEY in ai-agent/.env, then re-run this script."
         )
         return
 
-    if not HAS_ANTHROPIC_KEY:
+    if not LLM_READY:
         print(
-            "Tracing is configured, but ANTHROPIC_API_KEY is also needed "
-            "to actually run a traced chain. Set it in ai-agent/.env and "
-            "re-run."
+            "Tracing is configured, but an LLM is also needed to actually "
+            "run a traced chain -- ANTHROPIC_API_KEY is unset and "
+            "LLM_PROVIDER isn't 'ollama'. See ai-agent/llm.py / README.md "
+            "'One-time setup'."
         )
         return
 
     # Tracing is picked up automatically from the env vars above -- no
-    # LangSmith SDK call is needed in the chain code itself.
-    from langchain_anthropic import ChatAnthropic
-
+    # LangSmith SDK call is needed in the chain code itself. get_llm()
+    # (ai-agent/llm.py, added in Phase 4) is used here too instead of a
+    # hardcoded ChatAnthropic so this script also runs against
+    # LLM_PROVIDER=ollama -- same reasoning as the graph nodes.
+    from llm import get_llm
     from step1_langchain_basics import PROMPT, IncidentAssessment
 
-    model = ChatAnthropic(model="claude-sonnet-5", temperature=0)
-    chain = PROMPT | model.with_structured_output(IncidentAssessment)
+    chain = PROMPT | get_llm().with_structured_output(IncidentAssessment)
 
     sample_signal = "Order service latency is 3000ms, baseline is 120ms."
     result = chain.invoke({"signal": sample_signal})

@@ -11,14 +11,17 @@ subprocess over stdio like Steps 3/7/9 did. Same ClientSession API
 either way -- only the transport changes, which is the point of MCP
 being a client/server *protocol* rather than a library you import.
 
-STATUS: not yet verified live -- no GITHUB_TOKEN is configured (see
-ai-agent/.env.example). This script deliberately does NOT hardcode which
-tool names GitHub's server exposes (e.g. "list_commits" vs
-"list_recent_commits") because that surface can change; instead it lists
-whatever tools the server advertises and searches for ones that look
-like commit/file-history tools, then calls the best match. Run it once a
-token is set to confirm the actual names and fill in
-docs/learning-notes.md's Phase 3 Step 8 section with what came back.
+STATUS: verified live (see docs/learning-notes.md Phase 3 Step 8 for
+what came back -- 44 tools; the two this POC actually uses,
+`list_commits` and `get_commit`, are now wired into
+mcp_integrations/tools.py's get_recent_deployment_evidence(), called
+from investigate_hypothesis()'s deployment-hypothesis branch). This
+script deliberately does NOT hardcode which tool names GitHub's server
+exposes (e.g. "list_commits" vs "list_recent_commits") because that
+surface can change; instead it lists whatever tools the server
+advertises and searches for ones that look like commit/file-history
+tools, then calls the best match -- that search is what confirmed the
+real names now hardcoded in tools.py.
 
 Setup:
   1. Create a GitHub personal access token (fine-grained, "Contents:
@@ -28,7 +31,7 @@ Setup:
      GITHUB_REPO=<owner>/<repo>.
 
 Run:
-    ai-agent/.venv/bin/python ai-agent/mcp/github_client.py
+    ai-agent/.venv/bin/python ai-agent/mcp_integrations/github_client.py
 """
 import asyncio
 import os

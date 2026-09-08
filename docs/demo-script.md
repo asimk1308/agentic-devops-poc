@@ -10,8 +10,10 @@ All three assume infra is up:
 scripts/start-infra.sh
 ```
 
-And, for Scenarios 2/3's AI-agent half, `ANTHROPIC_API_KEY` set in
-`ai-agent/.env` (see README "One-time setup").
+And, for Scenarios 2/3's AI-agent half, an LLM configured in
+`ai-agent/.env` (see README "One-time setup" — `LLM_PROVIDER=ollama` is
+what's actually verified in this checkout). Scenario 3's git-correlation
+half additionally needs `GITHUB_TOKEN`/`GITHUB_REPO`.
 
 ---
 
@@ -74,38 +76,40 @@ it's the one that makes GitHub MCP genuinely load-bearing rather than
 decorative: the root cause isn't just "latency is high," it's "latency
 is high *and* it started right after this specific commit."
 
-**Status: partially runnable today.** The error-injection half
-(`scripts/inject_failure.sh`) is built and verified live (see
-`docs/learning-notes.md`). The git-correlation half needs
-`GITHUB_TOKEN`/`GITHUB_REPO` configured (`ai-agent/.env`) and
-`ai-agent/mcp_integrations/github_client.py` run once to confirm which
-tool names GitHub's MCP server actually exposes — neither has happened
-in this checkout yet.
-
-Runnable today (error-regression half):
+**Status: fully wired and verified live** —
+`get_recent_deployment_evidence()` (`mcp_integrations/tools.py`) calls
+GitHub's MCP server's real `list_commits`/`get_commit` tools and feeds
+the result into `investigate_hypothesis()`'s deployment branch; confirmed
+end-to-end by inspecting `investigation_results` directly (see
+`docs/learning-notes.md`). **Important caveat before running this for a
+demo:** GitHub MCP only sees what's on the *remote* — `git push` first,
+or the "recent commit" the agent finds won't match your actual local
+changes.
 
 ```bash
+# Push first (see caveat above)
+git push
+
 scripts/inject_failure.sh 0.3
 python3 scripts/generate_load.py --duration 20 --rate 8
-ai-agent/.venv/bin/python ai-agent/main.py "Investigate errors in Order Service."
+ai-agent/.venv/bin/python ai-agent/main.py \
+  "Investigate Order Service - errors started right after the last deployment."
 scripts/clear_faults.sh   # reset after
 ```
 
-To complete the git-correlation half once `GITHUB_TOKEN` is set:
+Expected: `generate_hypotheses` proposes a deployment-regression
+hypothesis; `investigate()` dispatches to
+`get_recent_deployment_evidence()` and pulls the real latest commit
+(message + changed files) from GitHub; `evaluate_evidence` should cite
+that commit alongside the error-rate evidence rather than treating them
+separately.
 
-1. Make a real, small regression commit — e.g. temporarily hardcode a
-   bad default in `FaultInjectionFilter.java` instead of reading
-   `FAULT_ERROR_RATE` from the environment — and commit it.
-2. Restart the service (the commit is now "deployed").
-3. Run `ai-agent/mcp_integrations/github_client.py` to confirm the real
-   tool names, then wire a `get_recent_commits()`/`get_changed_files()`
-   call into `nodes/investigate.py`'s deployment-hypothesis branch (it
-   currently only leaves a `git_note` placeholder there — see the
-   comment in `mcp_integrations/tools.py`'s `investigate_hypothesis`).
-4. Run the agent and confirm `evaluate_evidence`'s evidence list cites
-   the actual commit.
-5. `git revert` the regression commit as the demonstrated remediation,
-   instead of (or alongside) `restart_service()`.
+To make this maximally concrete for a live demo, push a commit that
+*actually* looks like the regression being diagnosed — e.g. temporarily
+hardcoding a bad default into `FaultInjectionFilter.java` instead of
+reading it from the environment — so the commit GitHub MCP surfaces is
+the same one causing the symptoms, and `git revert` becomes the
+demonstrated remediation instead of (or alongside) `restart_service()`.
 
 ---
 

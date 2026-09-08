@@ -227,19 +227,33 @@ protocol doesn't conjure data the source system isn't emitting.
 ## Phase 3, Step 8 — GitHub MCP
 `ai-agent/mcp_integrations/github_client.py`
 
-**Not yet verified live** — no `GITHUB_TOKEN` configured. This is the
-one Phase 3 piece that's genuinely different from Steps 7/9: it connects
-to a server GitHub operates (`https://api.githubcopilot.com/mcp/`) over
-streamable-HTTP with a bearer token, instead of a local stdio subprocess.
-The code deliberately avoids hardcoding exact tool names (GitHub's own
-naming for "list commits" isn't pinned in this codebase) and instead
-searches the live `list_tools()` result — since Step 8's actual learning
-objective, per the spec, is "understand how an agent discovers and calls
-tools exposed by an *external* MCP server," which the local stdio
-examples (Steps 3, 7, 9) can't teach: there, you wrote both sides, so
-there was never really any discovery required. Once a token is set, run
-it and fill in what the real tool names turned out to be — that answer
-belongs here, not guessed in advance.
+**Verified live.** This is the one Phase 3 piece that's genuinely
+different from Steps 7/9: it connects to a server GitHub operates
+(`https://api.githubcopilot.com/mcp/`) over streamable-HTTP with a
+bearer token, instead of a local stdio subprocess. The code deliberately
+avoids hardcoding exact tool names (GitHub's own naming for "list
+commits" isn't pinned in this codebase) and instead searches the live
+`list_tools()` result — since Step 8's actual learning objective, per
+the spec, is "understand how an agent discovers and calls tools exposed
+by an *external* MCP server," which the local stdio examples (Steps 3,
+7, 9) can't teach: there, you wrote both sides, so there was never
+really any discovery required.
+
+**What came back:** 44 tools total (far more than the read-only handful
+this POC needs — GitHub's server also covers PRs, issues, releases,
+branches, secret scanning, etc.). The two relevant to Section 12
+Scenario 4 turned out to be `list_commits` (returns a JSON *list* of
+commit summaries, not a dict — `mcp_integrations/client.py`'s
+`call_tool()` return type was widened from `dict` to `Any` because of
+this) and `get_commit` (returns `{sha, html_url, commit, author,
+committer, stats, files}`, where `files` is a list of `{filename,
+status, additions, changes}` per changed file — no `patch`/diff content,
+just the file list and line-count deltas, which is enough to correlate
+"this commit touched the service" without spending prompt tokens on full
+diffs). Both are now wired into
+`mcp_integrations/tools.py:get_recent_deployment_evidence()`, called
+from `investigate_hypothesis()`'s deployment-hypothesis branch — see the
+Phase 4 GitHub-correlation section below for the live end-to-end result.
 
 ---
 
@@ -490,3 +504,91 @@ fed that garbage straight into `get_recent_errors()` → the hypothesis
 LLM prompt. Fixed by matching both processes with `pkill -f
 "spring-boot:run"` and waiting on `pgrep`, not just the port, before
 truncating.
+
+---
+
+## Phase 4, LangSmith tracing (Section 16, Section 25 step 18)
+
+**Verified live**: `LANGCHAIN_TRACING_V2=true` + a real `LANGCHAIN_API_KEY`
+in `ai-agent/.env`, confirmed by querying the LangSmith API directly
+(`client.list_runs(project_name=...)`) rather than just trusting that the
+script didn't error -- the run tree for one `ai-agent/main.py` invocation
+showed exactly the nesting Section 16 describes: one `chain` run per
+LangGraph node (`understand_incident`, `gather_evidence`,
+`generate_hypotheses`, `investigate`, `evaluate_evidence`,
+`plan_remediation`, `human_approval`, `validate`), each conditional edge
+(`route_after_evaluate`, `route_after_approval`) as its own run, and each
+LLM node's internals as a nested `RunnableSequence` →
+`ChatPromptTemplate` → `ChatOllama` → `PydanticOutputParser` chain --
+i.e. the exact rendered prompt and raw model output are inspectable per
+node, not just the parsed result the node returns.
+
+**Also had to retrofit `step1_langchain_basics.py`'s Step 4 companion
+script** (`step4_langsmith_tracing.py`) to use `llm.py`'s `get_llm()`
+instead of a hardcoded `ChatAnthropic(...)` -- it predates `llm.py`
+(built in this same phase) and would otherwise have needed
+`ANTHROPIC_API_KEY` specifically to demonstrate tracing at all, even
+though tracing itself has nothing to do with which model is behind it.
+
+**A real gap this surfaced, worth knowing before relying on tracing for
+debugging:** MCP tool calls (`mcp_integrations/tools.py`, used by
+`gather_evidence`/`investigate`/`execute_remediation`/`validate`) do
+**not** appear as their own runs in the trace -- they're plain `asyncio`
+calls to a subprocess over stdio, not LangChain `Runnable`s, so
+LangSmith's automatic instrumentation has nothing to hook. The trace
+shows "this node ran and returned X," not "this node called
+`get_service_metrics()` which called Prometheus" -- exactly the boundary
+LangChain's callback system covers (LLM calls, prompts, parsers, chains)
+versus what it doesn't (arbitrary I/O a node happens to do). A
+production version wanting MCP calls in the trace too would need to wrap
+them as `@tool`-decorated LangChain tools or manually create child runs
+with the LangSmith SDK -- neither done here, since the nodes call
+`mcp_integrations.tools` directly rather than exposing them as
+LangChain-visible tool objects (a deliberate Section 22 Principle 1
+choice: these calls are deterministic dispatch, not something an LLM
+chooses to invoke, so they were never modeled as agent-facing "tools" in
+the LangChain sense to begin with).
+
+---
+
+## Phase 4, deployment-regression correlation (Section 12 Scenario 4)
+
+`mcp_integrations/tools.py:get_recent_deployment_evidence()`, wired into
+`investigate_hypothesis()`'s deployment branch (replacing the earlier
+placeholder note).
+
+**Verified live, full path:** ran `ai-agent/main.py` with an incident
+description phrased to suggest a deployment cause
+("...possibly a code regression"). `generate_hypotheses` proposed
+"Deployment introduced a regression..." at 70% confidence;
+`investigate()` dispatched to `get_recent_deployment_evidence()`, which
+made two real calls to GitHub's remote MCP server
+(`list_commits` → `get_commit`) and returned the actual latest commit's
+message and 30 changed files; that evidence landed in
+`investigation_results` and was available to `evaluate_evidence`'s
+prompt — confirmed directly by calling the nodes in sequence and
+inspecting state between them, not just trusting the final output.
+
+**A limitation worth flagging before using this for a real demo:** GitHub
+MCP only sees what's actually on the *remote* — `list_commits` returned
+exactly one commit (`6cd80a2`, "Phases 1-3") because this checkout's
+later commits (Phase 4's graph, fault injection, the Ollama switch) were
+all still local/unpushed at the time of this test. A live Scenario 4 run
+needs `git push` first, or the "recent deployment" the agent finds won't
+match what's actually running. (Neat framing this makes possible once
+pushed: the `FaultInjectionFilter.java` commit itself becomes a
+plausible "regression commit" for the agent to correctly point at.)
+
+**Also worth flagging — a genuine model-honesty gap, not a wiring bug:**
+a separate run with the *same* suggestively-worded incident description
+but no fault actually injected produced an 80%-confidence root cause
+("resource contention or misconfiguration") that the evidence didn't
+clearly support — `metrics.status` was `HEALTHY` the whole time.
+`prompts/hypothesis_generation.md` explicitly instructs proposing "no
+significant incident" when metrics are healthy, but a suggestive
+incident description text apparently outweighed the actual evidence for
+this model. Worth checking whether Anthropic's models are more resistant
+to this once billing is sorted — but either way it's a real answer to
+Section 23's "how honest is the agent about uncertainty?" evaluation
+question, and a good demo talking point about why the evidence, not the
+prompt, should be trusted.

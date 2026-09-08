@@ -20,23 +20,29 @@ truth for architecture and the step-by-step build sequence.
 - ✅ **Phase 2 — Spring Boot + Prometheus infra**: `demo-service/` (Order
   Service) and `prometheus/` built and verified end-to-end — see
   "Running Phase 2" below.
-- 🟡 **Phase 3 — MCP servers**: observability-server and
-  remediation-server built and verified live. GitHub MCP client written
-  but unverified — needs a `GITHUB_TOKEN` (see "Running Phase 3" below).
+- ✅ **Phase 3 — MCP servers**: observability-server, remediation-server,
+  and GitHub MCP all built and verified live (see "Running Phase 3").
 - ✅ **Phase 4 — full LangGraph incident-response workflow**: built,
   wired, and verified live end-to-end — all 9 nodes, the Step 13
   investigation loop, the Node 7 human-approval interrupt (both approve
-  and reject paths), all three Section 21 demo scenarios, real LLM
-  calls throughout. Currently running on a local model (Ollama +
-  `qwen2.5`, `LLM_PROVIDER=ollama`) rather than Anthropic — see
-  "Running Phase 4" below and `docs/learning-notes.md` for why and what
-  it surfaced.
+  and reject paths), all three Section 21 demo scenarios including
+  Scenario 4's GitHub-commit correlation, real LLM calls throughout.
+  Currently running on a local model (Ollama + `qwen2.5`,
+  `LLM_PROVIDER=ollama`) rather than Anthropic — see "Running Phase 4"
+  below and `docs/learning-notes.md` for why and what it surfaced.
 - ✅ **Fault injection (Section 12)**: latency and error-rate injection
   (`scripts/inject_latency.sh` / `inject_failure.sh`) built and verified
   live end-to-end through Prometheus into the observability MCP tools —
-  see "Running fault injection" and `docs/demo-script.md`. Scenario 4's
-  git-commit correlation half is not yet wired in (needs `GITHUB_TOKEN`
-  — same gap as Phase 3's GitHub MCP item above).
+  see "Running fault injection" and `docs/demo-script.md`.
+- ✅ **LangSmith tracing (Section 16)**: verified live — confirmed via
+  the LangSmith API directly, not just a clean exit, that a full graph
+  run produces one traced run per node/route plus the full
+  prompt→model→parser chain underneath each LLM node. See
+  `docs/learning-notes.md` for a real gap it surfaced (MCP tool calls
+  aren't visible inside the trace, only the node that made them).
+
+All 18 steps of `PLAN.md` Section 25's "Definition of Success" checklist
+are now verified live at least once.
 
 ## One-time setup
 
@@ -73,21 +79,23 @@ Then edit `ai-agent/.env` and set `LLM_PROVIDER` (see `ai-agent/llm.py`):
   in this checkout (see `docs/learning-notes.md` for why, and a real
   structured-output gap it surfaced with a local model).
 
-`LANGCHAIN_API_KEY`/`LANGCHAIN_TRACING_V2` (for LangSmith) and
-`GITHUB_TOKEN` (for GitHub MCP, Phase 3) are optional and only needed
-once you reach the steps that use them.
+`GITHUB_TOKEN` + `GITHUB_REPO` (for GitHub MCP, Phase 3, and Scenario
+4's deployment correlation) and `LANGCHAIN_API_KEY` +
+`LANGCHAIN_TRACING_V2=true` (for LangSmith tracing) are optional and
+only needed once you reach the steps that use them — all are set in
+this checkout (see "Status" above).
 
 ## Running Phase 1
 
 From `ai-agent/`:
 
 ```bash
-.venv/bin/python step1_langchain_basics.py     # needs ANTHROPIC_API_KEY
+.venv/bin/python step1_langchain_basics.py     # needs an LLM (llm.py)
 .venv/bin/python step2_langgraph_basics.py     # no keys needed
 .venv/bin/python step3_mcp_basics/client.py    # no keys needed
 .venv/bin/python step4_langsmith_tracing.py    # explains tracing; runs a
                                                 # traced call if LangSmith
-                                                # + Anthropic keys are set
+                                                # is configured too
 ```
 
 Each script's docstring explains what it demonstrates and the "learning
@@ -140,7 +148,7 @@ ai-agent/.venv/bin/python mcp-servers/observability-server/test_client.py
 ai-agent/.venv/bin/python mcp-servers/remediation-server/test_client.py
 
 # GitHub MCP: needs GITHUB_TOKEN + GITHUB_REPO in ai-agent/.env first;
-# prints setup instructions and exits cleanly if unset
+# lists all tools GitHub's server advertises, then lists recent commits
 ai-agent/.venv/bin/python ai-agent/mcp_integrations/github_client.py
 ```
 
@@ -163,10 +171,17 @@ approved) execute the restart → validate → print a before/after
 summary. Nothing is executed without that approval prompt — approve
 only if you actually want the real Order Service process restarted.
 
-To watch the full trace (every node, every LLM call, every MCP tool
-call) in LangSmith instead of only the terminal output, set
-`LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` in `ai-agent/.env`
-first (Spec Section 16).
+To watch the full trace (every node, every conditional route, every LLM
+call's exact prompt/response) in LangSmith instead of only the terminal
+output, set `LANGCHAIN_TRACING_V2=true` + `LANGCHAIN_API_KEY` in
+`ai-agent/.env` first (Spec Section 16) — already on in this checkout.
+Note MCP tool calls themselves don't show up as separate trace entries
+(see `docs/learning-notes.md`).
+
+For an incident description that steers toward the deployment-regression
+hypothesis (Scenario 4, pulls real commit data via GitHub MCP — needs
+`GITHUB_TOKEN`/`GITHUB_REPO`, and a `git push` first so the agent sees
+your actual latest commit), see `docs/demo-script.md` Scenario 3.
 
 ## Running fault injection
 

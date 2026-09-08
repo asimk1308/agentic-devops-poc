@@ -16,17 +16,22 @@ manager, since graph nodes call MCP tools repeatedly rather than as
 one-off manual verification scripts.
 """
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
+import httpx2
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.streamable_http import streamable_http_client
 
 MCP_SERVERS_DIR = Path(__file__).parent.parent.parent / "mcp-servers"
 OBSERVABILITY_SERVER = MCP_SERVERS_DIR / "observability-server" / "server.py"
 REMEDIATION_SERVER = MCP_SERVERS_DIR / "remediation-server" / "server.py"
+
+GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/"
 
 
 @asynccontextmanager
@@ -39,8 +44,34 @@ async def mcp_session(server_script: Path) -> AsyncIterator[ClientSession]:
             yield session
 
 
-async def call_tool(session: ClientSession, name: str, arguments: dict | None = None) -> dict:
-    """Call a tool and parse its (single, text) content block as JSON."""
+@asynccontextmanager
+async def github_mcp_session() -> AsyncIterator[ClientSession]:
+    """
+    Same shape as mcp_session(), but for GitHub's own remote MCP server
+    (Section 7 MCP Server 1) -- streamable-HTTP + bearer auth instead of
+    a locally-spawned stdio subprocess, since this is a server GitHub
+    operates, not one this repo hosts. See github_client.py for the
+    tool-discovery script this was first verified with. Raises
+    RuntimeError if GITHUB_TOKEN isn't set -- callers (tools.py) catch
+    this to degrade gracefully rather than crash an investigation.
+    """
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN is not set")
+
+    http_client = httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"})
+    async with streamable_http_client(GITHUB_MCP_URL, http_client=http_client) as (
+        read_stream,
+        write_stream,
+    ):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            yield session
+
+
+async def call_tool(session: ClientSession, name: str, arguments: dict | None = None) -> Any:
+    """Call a tool and parse its (single, text) content block as JSON -- a dict for most
+    tools, but e.g. GitHub's `list_commits` returns a JSON list, hence `Any` not `dict`."""
     result = await session.call_tool(name, arguments=arguments or {})
     if not result.content:
         return {}

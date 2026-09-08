@@ -33,18 +33,17 @@ tradeoffs, and `README.md` "Status" for the current per-phase state.
               client.py  -- generic stdio MCP session helper
               tools.py   -- domain calls nodes actually import
               github_client.py -- separate: remote streamable-HTTP,
-                                  not spawned locally (unverified,
-                                  needs GITHUB_TOKEN)
+                                  not spawned locally
                      │
         ┌────────────┼─────────────────────┐
         ▼            ▼                     ▼
   observability-   remediation-       GitHub's own remote
   server (stdio)   server (stdio)     MCP server (HTTP)
-        │                │
-        ▼                ▼
-   Prometheus :9090   restart_service()
-   + demo-service       kills/relaunches
-   /actuator/*          demo-service
+        │                │                  │
+        ▼                ▼                  ▼
+   Prometheus :9090   restart_service()  list_commits / get_commit
+   + demo-service       kills/relaunches   (deployment-hypothesis
+   /actuator/*          demo-service        evidence)
         │
         ▼
   demo-service (Spring Boot, :8080)
@@ -75,12 +74,14 @@ purpose (see `docs/learning-notes.md` Phase 3 Step 9) — that's the
 agent layer's job.
 
 **ai-agent/mcp_integrations/** — the client side of that boundary.
-`client.py` is a generic "spawn a server over stdio, call a tool, parse
-JSON" helper; `tools.py` is what graph nodes actually import (one
-session per logical need, not per tool call). `github_client.py` talks
-to a *different* kind of MCP server — one GitHub operates, over
-streamable-HTTP — and is the one integration not yet verified live in
-this checkout (needs `GITHUB_TOKEN`).
+`client.py` has both a `mcp_session()` (spawn a local server over stdio)
+and a `github_mcp_session()` (streamable-HTTP + bearer token, for a
+server GitHub operates rather than one this repo hosts) — same
+`ClientSession` API either way, only the transport differs. `tools.py`
+is what graph nodes actually import: one session per logical need, not
+per tool call, including `get_recent_deployment_evidence()` (real
+`list_commits`/`get_commit` calls, feeding
+`investigate_hypothesis()`'s deployment branch).
 
 **ai-agent/graph/ + ai-agent/nodes/** — the LangGraph workflow itself:
 9 nodes matching `PLAN.md` Section 11 one-to-one, wired by
@@ -104,12 +105,6 @@ recommendation, prompt, resume, print the final summary.
 
 ## What's spec shape but not yet real
 
-- **Deployment-regression correlation**: `nodes/investigate.py`'s
-  deployment-hypothesis branch currently only leaves a placeholder note
-  (`mcp_integrations/tools.py`) instead of calling GitHub MCP — blocked
-  on the same unverified `github_client.py` above. See
-  `docs/demo-script.md` Scenario 3 for the concrete steps to finish
-  this once a token is available.
 - **Docker** (`PLAN.md` Section 18): everything above runs natively.
   Explicitly optional per the spec ("containerize only if time
   permits... do not spend hours debugging container networking").
