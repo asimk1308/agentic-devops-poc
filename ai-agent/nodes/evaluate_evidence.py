@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 5. The detective lays out all her guesses and all the
+clues she found, and picks her best answer for "what's really wrong" --
+plus how confident she really is. If she's not confident enough, the
+map in graph.py sends her back to Step 3 to guess again with more clues.
+
 Node 5 (Spec Section 11): Evaluate Evidence.
 
 LLM reasoning over hypotheses + whatever investigate() has gathered so

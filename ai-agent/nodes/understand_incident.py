@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 1. You tell the detective "the website is slow!" in
+plain words. This file's job is to ask the AI brain to turn that into a
+neat little form: which website, what kind of problem, how urgent --
+like filling out an intake form before starting a case.
+
 Node 1 (Spec Section 11): Understand Incident.
 
 LLM call with structured output -- turns a free-text incident report

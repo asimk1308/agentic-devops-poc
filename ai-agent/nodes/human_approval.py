@@ -1,4 +1,10 @@
 """
+🧒 For a kid: Step 7, the most important one. The detective stops
+completely and shows her plan to a real person -- you! -- and waits.
+She will not touch anything risky until you say yes. `interrupt(...)`
+is the magic word that actually freezes her and hands control back to
+main.py, which is what asks you the question out loud.
+
 Node 7 (Spec Section 11): Human Approval.
 
 This is the node the whole spec keeps pointing at (Section 22

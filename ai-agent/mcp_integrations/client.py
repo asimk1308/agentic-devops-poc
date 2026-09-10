@@ -1,4 +1,11 @@
 """
+🧒 For a kid: this file is a walkie-talkie. It knows how to call up a
+helper, say "hey, do this one job for me," and bring back the answer.
+There are two kinds of walkie-talkies here: `mcp_session` calls a helper
+running right on this same computer, and `github_mcp_session` calls a
+helper far away on the internet (GitHub) -- same walkie-talkie buttons
+either way, just a different phone line underneath.
+
 Generic MCP stdio client helper.
 
 (Note on location: the spec's project structure calls this directory

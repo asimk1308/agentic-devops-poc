@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 3. Now the detective uses her AI brain to come up
+with a couple of guesses about what might be wrong -- like "maybe it's
+the database" or "maybe too many people are using it at once" -- and
+says how sure she is about each guess.
+
 Node 3 (Spec Section 11): Generate Hypotheses.
 
 LLM reasoning over the initial evidence. Structured output (a list of

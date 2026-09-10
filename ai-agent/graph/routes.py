@@ -1,4 +1,9 @@
 """
+🧒 For a kid: these are the two "which way do we go?" signs on the map
+in graph.py. They don't think or guess anything themselves -- they just
+look at a number or a yes/no the detective already wrote down, and point
+left or right. Simple, boring, and exactly why nothing goes wrong here.
+
 Conditional edges (Spec Section 11 Step 13, Section 8's diamond
 decision points). Each function only inspects state and returns a
 string key -- no LLM calls here; *deciding how to route* on numbers

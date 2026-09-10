@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 9, the last one. The detective checks everything
+again AFTER the fix and compares it to how things looked at the very
+start -- honestly! If the fix didn't actually work, this file says so
+instead of pretending everything is fine.
+
 Node 9 (Spec Section 11): Validate.
 
 Re-pulls health + metrics after remediation and diffs them against the

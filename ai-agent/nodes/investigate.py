@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 4. For each guess, the detective checks the clue
+that actually matches it -- like checking fingerprints for one guess
+and checking a security camera for a different guess. She skips clues
+she already checked before, so she never repeats the same work twice.
+
 Node 4 (Spec Section 11): Investigation Loop.
 
 Pulls hypothesis-specific evidence for whichever hypotheses haven't been

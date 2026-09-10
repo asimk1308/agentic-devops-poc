@@ -1,4 +1,10 @@
 """
+🧒 For a kid: this is the "start" button for the whole robot detective.
+You type what's wrong (like "the website is slow!"), and this file
+wakes up the detective, watches her work, and if she ever needs to ask
+"is it OK if I do this?" -- THIS file is what asks you and waits for
+your answer. At the end, it prints what she found.
+
 Phase 4 entry point: run the full incident-response graph end to end
 (Spec Section 25's 18-step demo).
 
@@ -67,6 +73,9 @@ def run(incident_description: str) -> None:
         config=config,
     )
 
+    # 🧒 The detective might stop partway through and say "I need your OK
+    # before I do this." When that happens, we show you her plan, wait
+    # for you to type y or n, and then tell her to carry on with your answer.
     while "__interrupt__" in result:
         interrupt = result["__interrupt__"][0]
         _print_approval_request(interrupt.value)

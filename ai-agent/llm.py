@@ -1,4 +1,11 @@
 """
+🧒 For a kid: this file is a phone with two buttons. Button 1 calls a
+big, very smart AI brain that lives on the internet (Claude). Button 2
+calls a smaller AI brain that lives right here on this computer
+(Ollama). Every part of the detective that needs to "think" picks up
+THIS phone instead of having its own -- so if we ever want to switch
+brains, we only change it in one place.
+
 Single place every LLM-calling node gets its chat model from (Section 15
 -- LangChain's job is "LLM initialization," among other things). Nodes
 import get_llm() instead of constructing ChatAnthropic/ChatOllama

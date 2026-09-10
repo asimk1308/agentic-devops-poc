@@ -1,4 +1,10 @@
 """
+🧒 For a kid: this file draws the map of the whole mystery-solving
+process -- nine steps in order, one arrow pointing to the next. Two
+special spots on the map: one where the detective might loop back and
+look for more clues if she's not sure yet, and one where she has to
+stop completely and wait for a grown-up (you) to say "yes, go ahead."
+
 Main graph (Spec Section 8/11): wires the nine nodes into the workflow
 diagrammed in Section 8, including the Step 13 investigation loop and
 the Node 7 human-approval interrupt.
@@ -47,6 +53,8 @@ def build_graph():
     graph.add_edge("generate_hypotheses", "investigate")
     graph.add_edge("investigate", "evaluate_evidence")
 
+    # 🧒 A fork in the road: "am I sure enough yet?" If not, go dig for
+    # more clues again; if yes, move on to planning a fix.
     # Step 13: loop back for another gather/evaluate pass, capped in
     # routes.route_after_evaluate, or proceed once confidence is enough.
     graph.add_conditional_edges(
@@ -57,6 +65,8 @@ def build_graph():
 
     graph.add_edge("plan_remediation", "human_approval")
 
+    # 🧒 Another fork: "did the grown-up say yes?" Yes -> actually fix
+    # it. No (or nothing to fix) -> skip straight to checking the result.
     # Node 7: interrupts here (unless the plan needs no approval); the
     # graph only reaches "execute" on a resumed, approved run.
     graph.add_conditional_edges(

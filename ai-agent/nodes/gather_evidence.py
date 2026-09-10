@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 2. Before guessing anything, the detective always
+checks the same three basic things first -- is the website even alive?
+What do the numbers look like? Any error messages? No thinking needed
+here, just asking the right helpers (see mcp_integrations/tools.py).
+
 Node 2 (Spec Section 11): Gather Initial Evidence.
 
 Deliberately deterministic, no LLM call -- Spec Section 22 Principle 1:

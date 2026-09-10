@@ -1,4 +1,10 @@
 """
+🧒 For a kid: this is a special phone call just to GitHub, where all the
+code changes live. It asks "what tools can I use here?" and then "what
+did you change most recently?" -- because maybe the last code change is
+exactly what broke things! You can run this file by itself to see what
+it finds, without starting the whole detective story.
+
 GitHub MCP connection (Spec Section 7, MCP Server 1 — Source Control).
 
 Spec: "For the POC, use an existing GitHub MCP server if possible" and

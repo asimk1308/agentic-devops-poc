@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 8. Only happens if you said yes in Step 7. This is
+the one spot in the whole detective story where she actually DOES
+something for real -- pressing the button to restart the service --
+instead of just looking and thinking.
+
 Node 8 (Spec Section 11): Execute Remediation.
 
 Only reachable when routes.route_after_approval sends the graph here --

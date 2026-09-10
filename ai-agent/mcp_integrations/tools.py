@@ -1,4 +1,10 @@
 """
+🧒 For a kid: this file has the detective's favorite walkie-talkie
+messages already written out for her -- "ask if the website is healthy,"
+"ask about the errors," "ask what changed in the code recently." So she
+never has to remember exactly how to phrase a request; she just calls
+one of these functions.
+
 Domain-specific async helpers built on mcp_integrations/client.py -- what
 graph nodes actually import. Nodes never touch ClientSession directly;
 each function here opens exactly one MCP session covering everything it

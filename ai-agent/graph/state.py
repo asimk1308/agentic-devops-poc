@@ -1,4 +1,10 @@
 """
+🧒 For a kid: this is the detective's notebook. Every line below is one
+blank space in that notebook -- like "what's broken", "what I found",
+"my best guess". At the start of an investigation almost every page is
+empty; each step of the detective's work fills in a few more pages, and
+nothing ever gets erased, only added to.
+
 Shared LangGraph state (Spec Section 9).
 
 Section 10 is the important distinction to keep in mind while reading

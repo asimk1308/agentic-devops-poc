@@ -1,4 +1,9 @@
 """
+🧒 For a kid: Step 6. Now the detective writes down her plan for how to
+fix things -- but she does NOT do anything yet. Just a piece of paper
+saying "here's what I'd do, here's why, and here's how risky it is."
+That paper is what gets shown to you in the next step.
+
 Node 6 (Spec Section 11): Remediation Planner.
 
 LLM reasoning over the established root cause -- proposes an action
