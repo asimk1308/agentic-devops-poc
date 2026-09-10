@@ -1,0 +1,7 @@
+# Dev-only tooling -- not needed to run the agent, only to develop it.
+# Install with: .venv/bin/pip install -r requirements-dev.txt
+# Config: ai-agent/mypy.ini (why it's needed: namespace packages here
+# have no __init__.py, so mypy needs to be told ai-agent/ is the import
+# root -- same thing Python's own sys.path[0] already gives it at
+# runtime).
+mypy>=1.0

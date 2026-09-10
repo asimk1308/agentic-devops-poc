@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/ai-agent/.venv/bin/python",
+  "python.analysis.extraPaths": ["ai-agent"],
+  "mypy-type-checker.cwd": "${workspaceFolder}/ai-agent",
+  "mypy-type-checker.args": ["--config-file=mypy.ini"]
+}

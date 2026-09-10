@@ -66,6 +66,11 @@ cd ai-agent
 python3.12 -m venv .venv        # already created in this checkout
 ./.venv/bin/pip install -r requirements.txt
 cp .env.example .env            # already done in this checkout
+
+# Optional, only if your editor runs mypy (VS Code's Mypy Type Checker
+# extension, etc.) and you want it actually checking this code instead
+# of erroring on every first-party import:
+./.venv/bin/pip install -r requirements-dev.txt
 ```
 
 Then edit `ai-agent/.env` and set `LLM_PROVIDER` (see `ai-agent/llm.py`):
