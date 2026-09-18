@@ -5,3 +5,11 @@
 # root -- same thing Python's own sys.path[0] already gives it at
 # runtime).
 mypy>=1.0
+
+# Test suite (ai-agent/tests/, see pytest.ini) -- pytest-asyncio for the
+# async MCP tool functions in mcp_integrations/tools.py, respx to mock
+# the httpx calls the MCP servers make to Prometheus/Actuator so unit
+# tests don't need live infra.
+pytest>=8.0
+pytest-asyncio>=0.24
+respx>=0.21

@@ -40,6 +40,12 @@ truth for architecture and the step-by-step build sequence.
   prompt→model→parser chain underneath each LLM node. See
   `docs/learning-notes.md` for a real gap it surfaced (MCP tool calls
   aren't visible inside the trace, only the node that made them).
+- ✅ **Guardrails + test suite**: the human-approval gate before the
+  restart action is now a code-enforced invariant, not just a prompt
+  instruction, and a 3-tier `pytest` suite (unit/integration/eval)
+  covers it plus routing, MCP dispatch, and a regression test for a real
+  model-honesty gap `docs/learning-notes.md` documented — see
+  "Guardrails" and "Testing" below.
 
 All 18 steps of `PLAN.md` Section 25's "Definition of Success" checklist
 are now verified live at least once.
@@ -207,6 +213,55 @@ scripts/clear_faults.sh            # reset to a clean, no-fault state
 
 See [docs/demo-script.md](docs/demo-script.md) for full scenario
 walkthroughs combining this with `ai-agent/main.py`.
+
+## Guardrails
+
+Section 22 Principle 3 ("actions need more control than reads") was, up
+to this point, only a prompt instruction
+(`ai-agent/prompts/remediation_planning.md` telling the model "always
+set `requires_human_approval: true`"). Two invariants now enforce it in
+code instead:
+
+- `ai-agent/nodes/remediation.py`'s `RemediationPlan` schema
+  (`model_validator`) forces `requires_human_approval = True` whenever
+  `action != "NONE"`, even if the LLM's own output said otherwise —
+  closes a real gap where a weaker/misbehaving model could set that
+  field `False` and skip the human-approval interrupt entirely before a
+  real service restart.
+- `ai-agent/nodes/execute_remediation.py` refuses to run the one write
+  action (`restart_service`) unless `state["human_approved"]` is
+  `True`, as a defense-in-depth check independent of the graph's own
+  routing (`route_after_approval` is already supposed to be the only
+  path here, but nothing at the node itself enforced that before).
+
+## Testing
+
+`ai-agent/tests/` has three tiers, configured in `ai-agent/pytest.ini`:
+
+```bash
+cd ai-agent
+./.venv/bin/pip install -r requirements-dev.txt   # pytest, pytest-asyncio, respx
+
+./.venv/bin/pytest                 # unit: fast, mocked, no key/infra needed (default)
+./.venv/bin/pytest -m integration  # needs scripts/start-infra.sh running --
+                                    # the remediation one really restarts Order Service
+./.venv/bin/pytest -m eval         # needs a real LLM (ANTHROPIC_API_KEY, or
+                                    # LLM_PROVIDER=ollama + `ollama serve`) -- costs tokens
+```
+
+- **Unit** (`tests/unit/`, runs by default): routing logic, both
+  guardrails above, the approval interrupt/resume flow, all 4 LLM nodes
+  (via a fake-LLM fixture that stubs `get_llm()`), MCP keyword dispatch,
+  and both MCP servers' own logic (`respx`-mocked HTTP) — including the
+  DEGRADED/HEALTHY threshold that separates Scenario 1 from Scenario 2.
+- **Integration** (`tests/integration/`, opt-in): the real MCP servers
+  over the real MCP stdio transport, against live infra — a
+  pytest-discoverable complement to `mcp-servers/*/test_client.py`.
+- **Eval** (`tests/evals/`, opt-in): runs the real graph against a real
+  LLM for the 3 demo scenarios plus a regression test for the
+  "model-honesty gap" `docs/learning-notes.md` documents (suggestive
+  incident wording overriding healthy metrics) — verified passing
+  end-to-end against local Ollama/qwen2.5.
 
 ## Project layout
 

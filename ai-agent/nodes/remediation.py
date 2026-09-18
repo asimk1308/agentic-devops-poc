@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from llm import get_llm
 
@@ -35,6 +35,18 @@ class RemediationPlan(BaseModel):
     reason: str
     risk: Literal["LOW", "MEDIUM", "HIGH"]
     requires_human_approval: bool
+
+    @model_validator(mode="after")
+    def _force_approval_for_actions(self) -> "RemediationPlan":
+        # Guardrail, not a hint: nodes/human_approval.py's interrupt only
+        # fires when this is True, and prompts/remediation_planning.md's
+        # "always true for RESTART_SERVICE" instruction is only a prompt --
+        # a weaker/misbehaving model (see llm.py's Ollama path) could set
+        # this False and skip human-in-the-loop before a real restart.
+        # This makes the invariant a schema guarantee instead of a request.
+        if self.action != "NONE" and not self.requires_human_approval:
+            self.requires_human_approval = True
+        return self
 
 
 def plan_remediation(state: dict) -> dict:
